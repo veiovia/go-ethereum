@@ -20,6 +20,7 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/consensus/veiovia"
 	"math/big"
 	"runtime"
 	"sync"
@@ -246,6 +247,11 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, co
 	if chainConfig.Clique != nil {
 		return clique.New(chainConfig.Clique, db)
 	}
+
+	if chainConfig.Veiovia != nil {
+		return veiovia.New(chainConfig.Veiovia, db)
+	}
+
 	// Otherwise assume proof-of-work
 	switch config.PowMode {
 	case ethash.ModeFake:
@@ -408,6 +414,11 @@ func (s *Ethereum) shouldPreserve(block *types.Block) bool {
 	if _, ok := s.engine.(*clique.Clique); ok {
 		return false
 	}
+
+	if _, ok := s.engine.(*veiovia.Veiovia); ok {
+		return false
+	}
+
 	return s.isLocalBlock(block)
 }
 
@@ -449,13 +460,17 @@ func (s *Ethereum) StartMining(threads int) error {
 			log.Error("Cannot start mining without etherbase", "err", err)
 			return fmt.Errorf("etherbase missing: %v", err)
 		}
+
 		if clique, ok := s.engine.(*clique.Clique); ok {
-			wallet, err := s.accountManager.Find(accounts.Account{Address: eb})
-			if wallet == nil || err != nil {
-				log.Error("Etherbase account unavailable locally", "err", err)
-				return fmt.Errorf("signer missing: %v", err)
+			if err := checkForSignerAndAuthorize(eb, s, clique); err != nil {
+				return err
 			}
-			clique.Authorize(eb, wallet.SignData)
+		}
+
+		if veiovia, ok := s.engine.(*veiovia.Veiovia); ok {
+			if err := checkForSignerAndAuthorize(eb, s, veiovia); err != nil {
+				return err
+			}
 		}
 		// If mining is started, we can disable the transaction rejection mechanism
 		// introduced to speed sync times.
@@ -463,6 +478,19 @@ func (s *Ethereum) StartMining(threads int) error {
 
 		go s.miner.Start(eb)
 	}
+	return nil
+}
+
+func checkForSignerAndAuthorize(eb common.Address, eth *Ethereum, engine consensus.AuthorizableEngine) error {
+	wallet, err := eth.accountManager.Find(accounts.Account{Address: eb})
+
+	if wallet == nil || err != nil {
+		log.Error("Etherbase account unavailable locally", "err", err)
+		return fmt.Errorf("signer missing: %v", err)
+	}
+
+	engine.Authorize(eb, wallet.SignData)
+
 	return nil
 }
 

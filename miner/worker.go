@@ -386,6 +386,15 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				commit(true, commitInterruptResubmit)
 			}
 
+			if w.isRunning() && (w.chainConfig.Veiovia == nil || w.chainConfig.Veiovia.Period > 0) {
+				// Short circuit if no new transaction arrives.
+				if atomic.LoadInt32(&w.newTxs) == 0 {
+					timer.Reset(recommit)
+					continue
+				}
+				commit(true, commitInterruptResubmit)
+			}
+
 		case interval := <-w.resubmitIntervalCh:
 			// Adjust resubmit interval explicitly by user.
 			if interval < minRecommitInterval {

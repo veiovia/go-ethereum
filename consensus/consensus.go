@@ -18,6 +18,7 @@
 package consensus
 
 import (
+	"github.com/ethereum/go-ethereum/accounts"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -120,6 +121,13 @@ type Engine interface {
 
 	// Close terminates any background threads maintained by the consensus engine.
 	Close() error
+}
+
+type SignerFn func(signer accounts.Account, mimeType string, message []byte) ([]byte, error)
+
+type AuthorizableEngine interface {
+	Engine
+	Authorize(signer common.Address, signFn SignerFn)
 }
 
 // PoW is a consensus engine based on proof-of-work.
