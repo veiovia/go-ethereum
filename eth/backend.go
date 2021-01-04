@@ -467,8 +467,8 @@ func (s *Ethereum) StartMining(threads int) error {
 			}
 		}
 
-		if veiovia, ok := s.engine.(*veiovia.Veiovia); ok {
-			if err := checkForSignerAndAuthorize(eb, s, veiovia); err != nil {
+		if vei, ok := s.engine.(*veiovia.Veiovia); ok {
+			if err := checkForSignerAndAuthorize(eb, s, vei); err != nil {
 				return err
 			}
 		}

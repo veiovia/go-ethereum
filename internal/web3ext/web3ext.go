@@ -118,6 +118,57 @@ web3._extend({
 });
 `
 
+const VeioviaJs = `
+web3._extend({
+	property: 'veiovia',
+	methods: [
+		new web3._extend.Method({
+			name: 'getSnapshot',
+			call: 'veiovia_getSnapshot',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getSnapshotAtHash',
+			call: 'veiovia_getSnapshotAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getSigners',
+			call: 'veiovia_getSigners',
+			params: 1,
+			inputFormatter: [web3._extend.formatters.inputBlockNumberFormatter]
+		}),
+		new web3._extend.Method({
+			name: 'getSignersAtHash',
+			call: 'veiovia_getSignersAtHash',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'propose',
+			call: 'veiovia_propose',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'discard',
+			call: 'veiovia_discard',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'status',
+			call: 'veiovia_status',
+			params: 0
+		}),
+	],
+	properties: [
+		new web3._extend.Property({
+			name: 'proposals',
+			getter: 'veiovia_proposals'
+		}),
+	]
+});
+`
+
 const EthashJs = `
 web3._extend({
 	property: 'ethash',
