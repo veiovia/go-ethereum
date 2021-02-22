@@ -85,6 +85,8 @@ type Header struct {
 	Extra       []byte         `json:"extraData"        gencodec:"required"`
 	MixDigest   common.Hash    `json:"mixHash"`
 	Nonce       BlockNonce     `json:"nonce"`
+	// veiovia specific fields
+	Analyzers []byte `json:"analyzers"`
 }
 
 // field type overrides for gencodec

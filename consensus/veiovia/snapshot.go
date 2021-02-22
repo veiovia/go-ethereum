@@ -51,12 +51,13 @@ type Snapshot struct {
 	config   *params.VeioviaConfig // Consensus engine parameters to fine tune behavior
 	sigcache *lru.ARCCache         // Cache of recent block signatures to speed up ecrecover
 
-	Number  uint64                      `json:"number"`  // Block number where the snapshot was created
-	Hash    common.Hash                 `json:"hash"`    // Block hash where the snapshot was created
-	Signers map[common.Address]struct{} `json:"signers"` // Set of authorized signers at this moment
-	Recents map[uint64]common.Address   `json:"recents"` // Set of recent signers for spam protections
-	Votes   []*Vote                     `json:"votes"`   // List of votes cast in chronological order
-	Tally   map[common.Address]Tally    `json:"tally"`   // Current vote tally to avoid recalculating
+	Number    uint64                      `json:"number"`    // Block number where the snapshot was created
+	Hash      common.Hash                 `json:"hash"`      // Block hash where the snapshot was created
+	Signers   map[common.Address]struct{} `json:"signers"`   // Set of authorized signers at this moment
+	Recents   map[uint64]common.Address   `json:"recents"`   // Set of recent signers for spam protections
+	Analyzers []byte                      `json:"analyzers"` // List of analyzers, who can supply valid pairs to check
+	Votes     []*Vote                     `json:"votes"`     // List of votes cast in chronological order
+	Tally     map[common.Address]Tally    `json:"tally"`     // Current vote tally to avoid recalculating
 }
 
 // signersAscending implements the sort interface to allow sorting a list of addresses
@@ -69,15 +70,16 @@ func (s signersAscending) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 // newSnapshot creates a new snapshot with the specified startup parameters. This
 // method does not initialize the set of recent signers, so only ever use if for
 // the genesis block.
-func newSnapshot(config *params.VeioviaConfig, sigcache *lru.ARCCache, number uint64, hash common.Hash, signers []common.Address) *Snapshot {
+func newSnapshot(config *params.VeioviaConfig, sigcache *lru.ARCCache, number uint64, hash common.Hash, signers []common.Address, analyzers []byte) *Snapshot {
 	snap := &Snapshot{
-		config:   config,
-		sigcache: sigcache,
-		Number:   number,
-		Hash:     hash,
-		Signers:  make(map[common.Address]struct{}),
-		Recents:  make(map[uint64]common.Address),
-		Tally:    make(map[common.Address]Tally),
+		config:    config,
+		sigcache:  sigcache,
+		Number:    number,
+		Hash:      hash,
+		Signers:   make(map[common.Address]struct{}),
+		Recents:   make(map[uint64]common.Address),
+		Analyzers: analyzers,
+		Tally:     make(map[common.Address]Tally),
 	}
 	for _, signer := range signers {
 		snap.Signers[signer] = struct{}{}
@@ -314,6 +316,16 @@ func (s *Snapshot) signers() []common.Address {
 	}
 	sort.Sort(signersAscending(sigs))
 	return sigs
+}
+
+func (s *Snapshot) analyzers() []string {
+
+	var result []string
+
+	for i := 0; i < len(s.Analyzers)/ipLength; i++ {
+		result = append(result, string(s.Analyzers[i:i+ipLength]))
+	}
+	return result
 }
 
 // inturn returns if a signer at a given block height is in-turn or not.

@@ -19,10 +19,12 @@ package veiovia
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"io"
 	"math/big"
 	"math/rand"
+	"net/http"
 	"sync"
 	"time"
 
@@ -45,11 +47,11 @@ import (
 )
 
 const (
-	checkpointInterval = 1024 // Number of blocks after which to save the vote snapshot to the database
-	inmemorySnapshots  = 128  // Number of recent vote snapshots to keep in memory
-	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
-
-	wiggleTime = 500 * time.Millisecond // Random delay (per signer) to allow concurrent signers
+	checkpointInterval = 1024                   // Number of blocks after which to save the vote snapshot to the database
+	inmemorySnapshots  = 128                    // Number of recent vote snapshots to keep in memory
+	inmemorySignatures = 4096                   // Number of recent block signatures to keep in memory
+	wiggleTime         = 500 * time.Millisecond // Random delay (per signer) to allow concurrent signers
+	ipLength           = 4 * 3
 )
 
 // Veiovia proof-of-authority protocol constants.
@@ -136,6 +138,8 @@ var (
 	// errRecentlySigned is returned if a header is signed by an authorized entity
 	// that already signed a header recently, thus is temporarily not allowed to.
 	errRecentlySigned = errors.New("recently signed")
+
+	errAnalyzerVerification = errors.New("analyzer verification failed")
 )
 
 // ecrecover extracts the Ethereum account address from a signed header.
@@ -375,7 +379,7 @@ func (c *Veiovia) snapshot(chain consensus.ChainHeaderReader, number uint64, has
 				for i := 0; i < len(signers); i++ {
 					copy(signers[i][:], checkpoint.Extra[extraVanity+i*common.AddressLength:])
 				}
-				snap = newSnapshot(c.config, c.signatures, number, hash, signers)
+				snap = newSnapshot(c.config, c.signatures, number, hash, signers, checkpoint.Analyzers[:])
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
@@ -540,6 +544,9 @@ func (c *Veiovia) Prepare(chain consensus.ChainHeaderReader, header *types.Heade
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
+
+	header.Analyzers = snap.Analyzers
+
 	header.Time = parent.Time + c.config.Period
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
@@ -624,13 +631,15 @@ func (c *Veiovia) Seal(chain consensus.ChainHeaderReader, block *types.Block, re
 
 		log.Trace("Out-of-turn signing requested", "wiggle", common.PrettyDuration(wiggle))
 	}
-	// Sign all the things!
 
-	analyzerWorkError, _ := verifyAnalyzersWork()
+	// perform verification
+	analyzerWorkError, _ := c.verifyAnalyzersWork(snap)
 
 	if analyzerWorkError != nil {
-		return analyzerWorkError
+		return errAnalyzerVerification
 	}
+
+	// Sign all the things!
 
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeVeiovia, VeioviaRLP(header))
 	if err != nil {
@@ -734,12 +743,36 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 		header.Extra[:len(header.Extra)-crypto.SignatureLength], // Yes, this will panic if extra is too short
 		header.MixDigest,
 		header.Nonce,
+		header.Analyzers,
 	})
 	if err != nil {
 		panic("can't encode: " + err.Error())
 	}
 }
 
-func verifyAnalyzersWork() (error, common.Hash) {
-	return nil, [32]byte{}
+func (c *Veiovia) verifyAnalyzersWork(s *Snapshot) (error, common.Hash) {
+	analyzers := s.analyzers()
+
+	randomIndex := rand.Intn(len(analyzers))
+	ipRawString := analyzers[randomIndex]
+
+	ip := ipRawString[0:3] + "." + ipRawString[3:6] + "." + ipRawString[6:9] + "." + ipRawString[9:12]
+
+	r, err := http.Get("http://" + ip + ":9090/api/transaction")
+
+	if err != nil {
+		return err, *new(common.Hash)
+	}
+	defer r.Body.Close()
+
+	var i interface{}
+
+	err = json.NewDecoder(r.Body).Decode(i)
+
+	if err != nil {
+		return err, *new(common.Hash)
+	}
+
+	return nil, *new(common.Hash)
+
 }
