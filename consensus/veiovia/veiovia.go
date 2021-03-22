@@ -54,6 +54,16 @@ const (
 	ipLength           = 4 * 3
 )
 
+type DecoderData struct {
+	decoderName       string
+	decodedResultHash common.Hash
+}
+
+type AnalyzerData struct {
+	rawDataHash string
+	decoders    []DecoderData
+}
+
 // Veiovia proof-of-authority protocol constants.
 var (
 	epochLength = uint64(30000) // Default number of blocks after which to checkpoint and reset the pending votes
@@ -140,6 +150,8 @@ var (
 	errRecentlySigned = errors.New("recently signed")
 
 	errAnalyzerVerification = errors.New("analyzer verification failed")
+
+	errVeioviaBlockCreation = errors.New("analyzer verification failed")
 )
 
 // ecrecover extracts the Ethereum account address from a signed header.
@@ -551,6 +563,13 @@ func (c *Veiovia) Prepare(chain consensus.ChainHeaderReader, header *types.Heade
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
 	}
+
+	fillErr := c.fillAnalyses(snap, header)
+
+	if fillErr != nil {
+		return fillErr
+	}
+
 	return nil
 }
 
@@ -633,7 +652,7 @@ func (c *Veiovia) Seal(chain consensus.ChainHeaderReader, block *types.Block, re
 	}
 
 	// perform verification
-	analyzerWorkError, _ := c.verifyAnalyzersWork(snap)
+	analyzerWorkError := c.verifyAnalyzersWork(header)
 
 	if analyzerWorkError != nil {
 		return errAnalyzerVerification
@@ -750,7 +769,7 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 	}
 }
 
-func (c *Veiovia) verifyAnalyzersWork(s *Snapshot) (error, common.Hash) {
+func (c *Veiovia) fillAnalyses(s *Snapshot, h *types.Header) error {
 	analyzers := s.analyzers()
 
 	randomIndex := rand.Intn(len(analyzers))
@@ -761,18 +780,40 @@ func (c *Veiovia) verifyAnalyzersWork(s *Snapshot) (error, common.Hash) {
 	r, err := http.Get("http://" + ip + ":9090/api/transaction")
 
 	if err != nil {
-		return err, *new(common.Hash)
+		return err
 	}
+
 	defer r.Body.Close()
 
-	var i interface{}
+	data := new(AnalyzerData)
 
-	err = json.NewDecoder(r.Body).Decode(i)
+	err = json.NewDecoder(r.Body).Decode(data)
 
 	if err != nil {
-		return err, *new(common.Hash)
+		return err
 	}
 
-	return nil, *new(common.Hash)
+	if data.decoders == nil {
+		return errVeioviaBlockCreation
+	}
 
+	for _, a := range data.decoders {
+		h.Analyses = append(h.Analyses, a.decodedResultHash)
+	}
+
+	return nil
+}
+
+func (c *Veiovia) verifyAnalyzersWork(h *types.Header) error {
+	analyses := h.Analyses
+
+	for _, r1 := range analyses {
+		for _, r2 := range analyses {
+			if r2 != r1 {
+				return errAnalyzerVerification
+			}
+		}
+	}
+
+	return nil
 }
