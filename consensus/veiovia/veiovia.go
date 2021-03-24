@@ -584,6 +584,10 @@ func (c *Veiovia) Prepare(chain consensus.ChainHeaderReader, header *types.Heade
 func (c *Veiovia) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+
+	// TODO: Think about rewarding
+	state.AddBalance(header.Coinbase, new(big.Int).SetInt64(5000))
+
 	header.UncleHash = types.CalcUncleHash(nil)
 }
 
@@ -591,7 +595,11 @@ func (c *Veiovia) Finalize(chain consensus.ChainHeaderReader, header *types.Head
 // nor block rewards given, and returns the final block.
 func (c *Veiovia) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
+	// TODO: Think about rewarding
+	state.AddBalance(header.Coinbase, new(big.Int).SetInt64(5000))
+
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+
 	header.UncleHash = types.CalcUncleHash(nil)
 
 	// Assemble and return the final block for sealing
