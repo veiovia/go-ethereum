@@ -51,7 +51,6 @@ const (
 	inmemorySnapshots  = 128                    // Number of recent vote snapshots to keep in memory
 	inmemorySignatures = 4096                   // Number of recent block signatures to keep in memory
 	wiggleTime         = 500 * time.Millisecond // Random delay (per signer) to allow concurrent signers
-	ipLength           = 4 * 3
 )
 
 type DecoderData struct {
@@ -495,6 +494,13 @@ func (c *Veiovia) verifySeal(chain consensus.ChainHeaderReader, header *types.He
 			return errWrongDifficulty
 		}
 	}
+
+	analysisErr := c.verifyAnalyzersWork(header)
+
+	if analysisErr != nil {
+		return analysisErr
+	}
+
 	return nil
 }
 
@@ -773,11 +779,9 @@ func (c *Veiovia) fillAnalyses(s *Snapshot, h *types.Header) error {
 	analyzers := s.analyzers()
 
 	randomIndex := rand.Intn(len(analyzers))
-	ipRawString := analyzers[randomIndex]
+	url := analyzers[randomIndex]
 
-	ip := ipRawString[0:3] + "." + ipRawString[3:6] + "." + ipRawString[6:9] + "." + ipRawString[9:12]
-
-	r, err := http.Get("http://" + ip + ":9090/api/transaction")
+	r, err := http.Get(url)
 
 	if err != nil {
 		return err

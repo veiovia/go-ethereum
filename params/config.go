@@ -252,9 +252,8 @@ var (
 	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, new(EthashConfig), nil, nil}
 
 	AllVeioviaProtocolChanges = &ChainConfig{big.NewInt(88765899), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, nil, nil, &VeioviaConfig{
-		Period:              15,
-		Epoch:               30000,
-		ComparisonEndpoints: []string{},
+		Period: 15,
+		Epoch:  30000,
 	}}
 
 	TestRules = TestChainConfig.Rules(new(big.Int))
@@ -358,9 +357,8 @@ func (c *CliqueConfig) String() string {
 
 // VeioviaConfig is the consensus engine configs for bioinformation baked consensus based sealing.
 type VeioviaConfig struct {
-	Period              uint64   `json:"period"` // Number of seconds between blocks to enforce
-	Epoch               uint64   `json:"epoch"`  // Epoch length to reset votes and checkpoint
-	ComparisonEndpoints []string `json:"endpoints"`
+	Period uint64 `json:"period"` // Number of seconds between blocks to enforce
+	Epoch  uint64 `json:"epoch"`  // Epoch length to reset votes and checkpoint
 }
 
 // String implements the stringer interface, returning the consensus engine details.

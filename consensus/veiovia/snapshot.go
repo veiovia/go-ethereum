@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -322,8 +323,8 @@ func (s *Snapshot) analyzers() []string {
 
 	var result []string
 
-	for i := 0; i < len(s.Analyzers)/ipLength; i++ {
-		result = append(result, string(s.Analyzers[i:i+ipLength]))
+	for _, ip := range strings.Split(string(s.Analyzers[:]), " ") {
+		result = append(result, ip)
 	}
 	return result
 }
