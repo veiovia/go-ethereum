@@ -29,7 +29,7 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 		Number     math.HexOrDecimal64                         `json:"number"`
 		GasUsed    math.HexOrDecimal64                         `json:"gasUsed"`
 		ParentHash common.Hash                                 `json:"parentHash"`
-		Analyzers  []byte                                      `json:"analyzers"`
+		Analyzers  []string                                    `json:"analyzers"`
 	}
 	var enc Genesis
 	enc.Config = g.Config
@@ -67,8 +67,9 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 		Number     *math.HexOrDecimal64                        `json:"number"`
 		GasUsed    *math.HexOrDecimal64                        `json:"gasUsed"`
 		ParentHash *common.Hash                                `json:"parentHash"`
-		Analyzers  *hexutil.Bytes                              `json:"analyzers"`
+		Analyzers  []string                                    `json:"analyzers"`
 	}
+
 	var dec Genesis
 	if err := json.Unmarshal(input, &dec); err != nil {
 		return err
@@ -116,6 +117,6 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 		g.ParentHash = *dec.ParentHash
 	}
 
-	g.Analyzers = *dec.Analyzers
+	g.Analyzers = dec.Analyzers
 	return nil
 }

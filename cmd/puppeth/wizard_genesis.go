@@ -131,6 +131,7 @@ func (w *wizard) makeGenesis() {
 				break
 			}
 		}
+
 		// Sort the signers and embed into the extra-data section
 		for i := 0; i < len(signers); i++ {
 			for j := i + 1; j < len(signers); j++ {
@@ -143,6 +144,23 @@ func (w *wizard) makeGenesis() {
 		for i, signer := range signers {
 			copy(genesis.ExtraData[32+i*common.AddressLength:], signer[:])
 		}
+
+		// We also need the initial list of analyzers
+		fmt.Println()
+		fmt.Println("Please define analyzers URLs (mandatory at least two) P.S. Yes guys could be the same for now")
+
+		var analyzers []string
+		for {
+			if analyzer := w.readString(); analyzer != "" {
+				analyzers = append(analyzers, analyzer)
+				continue
+			}
+			if len(analyzers) > 1 {
+				break
+			}
+		}
+
+		copy(genesis.Analyzers, analyzers)
 
 	default:
 		log.Crit("Invalid consensus engine choice", "choice", choice)

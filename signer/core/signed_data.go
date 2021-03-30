@@ -285,7 +285,7 @@ func (api *SignerAPI) determineSignatureFormat(ctx context.Context, contentType 
 			header.Extra = newExtra
 		}
 		// Get back the rlp data, encoded by us
-		sighash, cliqueRlp, err := veioviaHeaderHashAndRlp(header)
+		sighash, veioviaRlp, err := veioviaHeaderHashAndRlp(header)
 		if err != nil {
 			return nil, useEthereumV, err
 		}
@@ -298,7 +298,7 @@ func (api *SignerAPI) determineSignatureFormat(ctx context.Context, contentType 
 		}
 		// Clique uses V on the form 0 or 1
 		useEthereumV = false
-		req = &SignDataRequest{ContentType: mediaType, Rawdata: cliqueRlp, Messages: messages, Hash: sighash}
+		req = &SignDataRequest{ContentType: mediaType, Rawdata: veioviaRlp, Messages: messages, Hash: sighash}
 	default: // also case TextPlain.Mime:
 		// Calculates an Ethereum ECDSA signature for:
 		// hash = keccak256("\x19${byteVersion}Ethereum Signed Message:\n${message length}${message}")

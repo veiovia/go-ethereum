@@ -21,13 +21,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"io"
-	"math/big"
-	"math/rand"
-	"net/http"
-	"sync"
-	"time"
-
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -44,6 +37,12 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 	lru "github.com/hashicorp/golang-lru"
 	"golang.org/x/crypto/sha3"
+	"io"
+	"math/big"
+	"math/rand"
+	"net/http"
+	"sync"
+	"time"
 )
 
 const (
@@ -54,13 +53,13 @@ const (
 )
 
 type DecoderData struct {
-	decoderName       string
-	decodedResultHash common.Hash
+	DecoderName       string
+	DecodedResultHash string
 }
 
 type AnalyzerData struct {
-	rawDataHash string
-	decoders    []DecoderData
+	RawDataHash string
+	Decoders    []DecoderData
 }
 
 // Veiovia proof-of-authority protocol constants.
@@ -150,7 +149,7 @@ var (
 
 	errAnalyzerVerification = errors.New("analyzer verification failed")
 
-	errVeioviaBlockCreation = errors.New("analyzer verification failed")
+	errVeioviaBlockCreation = errors.New("cannot create a block, analyzer is not available or response is wrong")
 )
 
 // ecrecover extracts the Ethereum account address from a signed header.
@@ -189,6 +188,8 @@ type Veiovia struct {
 
 	proposals map[common.Address]bool // Current list of proposals we are pushing
 
+	analyzersProposals map[string]bool // Current list of proposals we are pushing
+
 	signer common.Address     // Ethereum address of the signing key
 	signFn consensus.SignerFn // Signer function to authorize hashes with
 	lock   sync.RWMutex       // Protects the signer fields
@@ -210,11 +211,12 @@ func New(config *params.VeioviaConfig, db ethdb.Database) *Veiovia {
 	signatures, _ := lru.NewARC(inmemorySignatures)
 
 	return &Veiovia{
-		config:     &conf,
-		db:         db,
-		recents:    recents,
-		signatures: signatures,
-		proposals:  make(map[common.Address]bool),
+		config:             &conf,
+		db:                 db,
+		recents:            recents,
+		signatures:         signatures,
+		proposals:          make(map[common.Address]bool),
+		analyzersProposals: make(map[string]bool),
 	}
 }
 
@@ -483,6 +485,12 @@ func (c *Veiovia) verifySeal(chain consensus.ChainHeaderReader, header *types.He
 				return errRecentlySigned
 			}
 		}
+
+		analysisErr := c.verify(header.Analyses)
+
+		if analysisErr != nil {
+			return analysisErr
+		}
 	}
 	// Ensure that the difficulty corresponds to the turn-ness of the signer
 	if !c.fakeDiff {
@@ -493,12 +501,6 @@ func (c *Veiovia) verifySeal(chain consensus.ChainHeaderReader, header *types.He
 		if !inturn && header.Difficulty.Cmp(diffNoTurn) != 0 {
 			return errWrongDifficulty
 		}
-	}
-
-	analysisErr := c.verifyAnalyzersWork(header)
-
-	if analysisErr != nil {
-		return analysisErr
 	}
 
 	return nil
@@ -536,6 +538,7 @@ func (c *Veiovia) Prepare(chain consensus.ChainHeaderReader, header *types.Heade
 				copy(header.Nonce[:], nonceDropVote)
 			}
 		}
+
 		c.lock.RUnlock()
 	}
 	// Set the correct difficulty
@@ -568,12 +571,6 @@ func (c *Veiovia) Prepare(chain consensus.ChainHeaderReader, header *types.Heade
 	header.Time = parent.Time + c.config.Period
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
-	}
-
-	fillErr := c.fillAnalyses(snap, header)
-
-	if fillErr != nil {
-		return fillErr
 	}
 
 	return nil
@@ -665,19 +662,37 @@ func (c *Veiovia) Seal(chain consensus.ChainHeaderReader, block *types.Block, re
 		log.Trace("Out-of-turn signing requested", "wiggle", common.PrettyDuration(wiggle))
 	}
 
-	// perform verification
-	analyzerWorkError := c.verifyAnalyzersWork(header)
+	var result []string
 
-	if analyzerWorkError != nil {
-		return errAnalyzerVerification
+	for verified := false; !verified; {
+		var err error
+
+		err, result = c.nextDnaHash(snap)
+
+		if err != nil {
+			return err
+		}
+
+		// perform verification
+		err = c.verify(result)
+
+		verified = err == nil
+
+		if err != nil {
+			log.Warn("verification failed: " + err.Error())
+		}
 	}
 
 	// Sign all the things!
-
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeVeiovia, VeioviaRLP(header))
+
 	if err != nil {
 		return err
 	}
+
+	//insert hashes to a header for a future verification
+	insertAnalyses(result, header)
+
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
@@ -783,7 +798,7 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 	}
 }
 
-func (c *Veiovia) fillAnalyses(s *Snapshot, h *types.Header) error {
+func (c *Veiovia) nextDnaHash(s *Snapshot) (error, []string) {
 	analyzers := s.analyzers()
 
 	randomIndex := rand.Intn(len(analyzers))
@@ -792,7 +807,7 @@ func (c *Veiovia) fillAnalyses(s *Snapshot, h *types.Header) error {
 	r, err := http.Get(url)
 
 	if err != nil {
-		return err
+		return err, nil
 	}
 
 	defer r.Body.Close()
@@ -802,25 +817,29 @@ func (c *Veiovia) fillAnalyses(s *Snapshot, h *types.Header) error {
 	err = json.NewDecoder(r.Body).Decode(data)
 
 	if err != nil {
-		return err
+		return err, nil
 	}
 
-	if data.decoders == nil {
-		return errVeioviaBlockCreation
+	if data.Decoders == nil {
+		return errVeioviaBlockCreation, nil
 	}
 
-	for _, a := range data.decoders {
-		h.Analyses = append(h.Analyses, a.decodedResultHash)
+	result := *new([]string)
+
+	for _, a := range data.Decoders {
+		result = append(result, a.DecodedResultHash)
 	}
 
-	return nil
+	return nil, result
 }
 
-func (c *Veiovia) verifyAnalyzersWork(h *types.Header) error {
-	analyses := h.Analyses
+func (c *Veiovia) verify(hashes []string) error {
+	if len(hashes) < 2 {
+		return errAnalyzerVerification
+	}
 
-	for _, r1 := range analyses {
-		for _, r2 := range analyses {
+	for _, r1 := range hashes {
+		for _, r2 := range hashes {
 			if r2 != r1 {
 				return errAnalyzerVerification
 			}
@@ -828,4 +847,10 @@ func (c *Veiovia) verifyAnalyzersWork(h *types.Header) error {
 	}
 
 	return nil
+}
+
+func insertAnalyses(hashes []string, header *types.Header) {
+	for _, h := range hashes {
+		header.Analyses = append(header.Analyses, h)
+	}
 }

@@ -86,9 +86,8 @@ type Header struct {
 	MixDigest   common.Hash    `json:"mixHash"`
 	Nonce       BlockNonce     `json:"nonce"`
 	// veiovia specific fields
-	Analyzers []byte        `json:"analyzers"`
-	Analyses  []common.Hash `json:"analyses"`
-	Providers []common.Hash `json:"providers"`
+	Analyzers []string `json:"analyzers"`
+	Analyses  []string `json:"analyses"`
 }
 
 // field type overrides for gencodec
@@ -278,6 +277,17 @@ func CopyHeader(h *Header) *Header {
 		cpy.Extra = make([]byte, len(h.Extra))
 		copy(cpy.Extra, h.Extra)
 	}
+
+	if len(h.Analyzers) > 0 {
+		cpy.Analyzers = make([]string, len(h.Analyzers))
+		copy(cpy.Analyzers, h.Analyzers)
+	}
+
+	if len(h.Analyses) > 0 {
+		cpy.Analyses = make([]string, len(h.Analyses))
+		copy(cpy.Analyses, h.Analyses)
+	}
+
 	return &cpy
 }
 

@@ -32,7 +32,8 @@ func (h Header) MarshalJSON() ([]byte, error) {
 		MixDigest   common.Hash    `json:"mixHash"`
 		Nonce       BlockNonce     `json:"nonce"`
 		Hash        common.Hash    `json:"hash"`
-		Analyzers   []byte         `json:"analyzers"`
+		Analyzers   []string       `json:"analyzers"`
+		Analyses    []string       `json:"analyses"`
 	}
 	var enc Header
 	enc.ParentHash = h.ParentHash
@@ -52,6 +53,7 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.Nonce = h.Nonce
 	enc.Hash = h.Hash()
 	enc.Analyzers = h.Analyzers
+	enc.Analyses = h.Analyses
 	return json.Marshal(&enc)
 }
 
