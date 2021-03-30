@@ -151,7 +151,7 @@ func (w *wizard) makeGenesis() {
 
 		var analyzers []string
 		for {
-			if analyzer := w.readString(); analyzer != "" {
+			if analyzer := w.read(); analyzer != "" {
 				analyzers = append(analyzers, analyzer)
 				continue
 			}
@@ -160,8 +160,9 @@ func (w *wizard) makeGenesis() {
 			}
 		}
 
-		copy(genesis.Analyzers, analyzers)
+		genesis.Analyzers = analyzers
 
+		log.Info("__")
 	default:
 		log.Crit("Invalid consensus engine choice", "choice", choice)
 	}
