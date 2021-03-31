@@ -804,9 +804,11 @@ func (c *Veiovia) nextDnaHash(s *Snapshot) (error, []string) {
 	randomIndex := rand.Intn(len(analyzers))
 	url := analyzers[randomIndex]
 
+	log.Error("Calling databroker ", url, analyzers)
 	r, err := http.Get(url)
 
 	if err != nil {
+		log.Info("Error from data broker ", err)
 		return err, nil
 	}
 
@@ -817,6 +819,7 @@ func (c *Veiovia) nextDnaHash(s *Snapshot) (error, []string) {
 	err = json.NewDecoder(r.Body).Decode(data)
 
 	if err != nil {
+		log.Info("Error from data broker", err)
 		return err, nil
 	}
 
