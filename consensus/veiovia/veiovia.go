@@ -804,7 +804,7 @@ func (c *Veiovia) nextDnaHash(s *Snapshot) (error, []string) {
 	randomIndex := rand.Intn(len(analyzers))
 	url := analyzers[randomIndex]
 
-	log.Error("Calling databroker ", url, analyzers)
+	log.Info("Calling databroker ", url, analyzers)
 	r, err := http.Get(url)
 
 	if err != nil {
