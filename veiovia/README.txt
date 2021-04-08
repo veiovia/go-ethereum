@@ -23,7 +23,7 @@ Create Account: geth --datadir "$DATADIR" account new
 Init: geth --datadir "$DATADIR" init "$DATADIR/genesis.json"
 Create bootnode key: bootnode --genkey "$BOOT_NODE_KEY_NAME"
 Start bootnode: bootnode --nodekey "$BOOT_NODE_KEY_NAME"
-Run: geth --datadir "$DATADIR" --miner.etherbase "$ACCOUNT" --unlock "$ACCOUNT" --password "$PASSWORD_FILE_PATH" --mine --port $PORT --bootnodes '$BOOTNODE_ENODE' --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full"
+Run: geth --datadir "$DATADIR" --miner.etherbase "$ACCOUNT" --unlock "$ACCOUNT" --password "$PASSWORD_FILE_PATH" --mine --port $PORT --bootnodes "$BOOTNODE_ENODE" --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full"
 Attach console to a node: geth attach "$DATADIR/geth.ipc"
 
 
