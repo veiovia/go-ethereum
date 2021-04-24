@@ -8,4 +8,4 @@ DATADIR='./datadir'
 #Chain setup
 BOOT_NODE_KEY_NAME='test-veiovia'
 
-$BOOTNODE --nodekey "$BOOT_NODE_KEY_NAME" --addr '144.32.196.130:30301'
+$BOOTNODE --nodekey "$BOOT_NODE_KEY_NAME" --addr '3.9.139.189:30301'
