@@ -10,7 +10,8 @@ phases:
   build:
     commands:
       - echo Build started on `date`
-      - make all geth-linux geth-darwin geth-windows
+#      - make all geth-linux geth-darwin geth-windows
+      - make all
   post_build:
     commands:
       - echo Build completed on `date`
