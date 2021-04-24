@@ -3,18 +3,19 @@ version: 0.2
 phases:
   install:
     runtime-versions:
-      golang: 1.15
+      golang: 1.14
   pre_build:
     commands:
       - echo Nothing to do in the pre_build phase...
   build:
     commands:
+      - ls
       - echo Build started on `date`
       - make all geth-cross
   post_build:
     commands:
       - echo Build completed on `date`
 artifacts:
+  base-directory: 'build/bin'
   files:
     - '**/*'
-    base-directory: 'build/bin'
