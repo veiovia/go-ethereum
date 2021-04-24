@@ -9,9 +9,8 @@ phases:
       - echo Nothing to do in the pre_build phase...
   build:
     commands:
-      - ls
       - echo Build started on `date`
-      - make all geth-cross
+      - make all geth-linux geth-darwin geth-windows
   post_build:
     commands:
       - echo Build completed on `date`
