@@ -10,8 +10,9 @@ phases:
   build:
     commands:
       - echo Build started on `date`
+      - zip -r ./build/bin/test_net.zip ./veiovia/test_net/*
 #      - make all geth-linux geth-darwin geth-windows
-      - make all
+#      - make all
   post_build:
     commands:
       - echo Build completed on `date`
