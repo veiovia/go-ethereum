@@ -15,4 +15,4 @@ ACCOUNT='0xadcc655c25fb90c4afb95a93e1b4ae76325bc7f0'
 PASSWORD_FILE_PATH="$DATADIR/pass.txt"
 
 $GETH --datadir "$DATADIR" init "$DATADIR/genesis.json"
-$GETH --datadir "$DATADIR" --http --nodiscover --nat extip:3.10.116.247 --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full"
+$GETH --datadir "$DATADIR" --http --rpcaddr "3.10.116.247" --rpccorsdomain "*" --nodiscover --nat extip:3.10.116.247 --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full"
