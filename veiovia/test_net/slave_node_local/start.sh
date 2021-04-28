@@ -15,4 +15,4 @@ ACCOUNT='0xadcc655c25fb90c4afb95a93e1b4ae76325bc7f0'
 PASSWORD_FILE_PATH="$DATADIR/pass.txt"
 
 $GETH --datadir "$DATADIR" init "$DATADIR/genesis.json"
-$GETH  --verbosity 6 --nodiscover --datadir "$DATADIR" --unlock "$ACCOUNT" --password "$PASSWORD_FILE_PATH" --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full" --http --allow-insecure-unlock
+$GETH  --nodiscover --datadir "$DATADIR" --unlock "$ACCOUNT" --password "$PASSWORD_FILE_PATH" --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full" --http --allow-insecure-unlock
