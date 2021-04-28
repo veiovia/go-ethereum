@@ -15,4 +15,4 @@ PASSWORD_FILE_PATH="$DATADIR/pass.txt"
 BOOTNODE_ENODE='enode://3967835cb2089e139cc1093b43c6c1effca93571483a74aba290c90648f09d4b7a51fe1154464c8166a52b9a699da8cb665545340bdbee3fbe22fdc5e50e22b1@3.10.116.247:30303'
 
 $GETH --datadir "$DATADIR" init "$DATADIR/genesis.json"
-$GETH --verbosity 6 --datadir "$DATADIR" --bootnodes $BOOTNODE_ENODE --miner.etherbase "$ACCOUNT" --unlock "$ACCOUNT" --password "$PASSWORD_FILE_PATH" --mine --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full" --miner.gastarget '10000000000'
+$GETH --verbosity 6 --nodiscover --datadir "$DATADIR" --bootnodes $BOOTNODE_ENODE --miner.etherbase "$ACCOUNT" --unlock "$ACCOUNT" --password "$PASSWORD_FILE_PATH" --mine --networkid $NETWORKID --gasprice "$GASPRICE" --syncmode "full" --miner.gastarget '10000000000'
