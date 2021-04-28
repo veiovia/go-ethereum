@@ -6,7 +6,7 @@ BOOTNODE='./../../../build/bin/bootnode'
 DATADIR='./datadir'
 
 #Chain setup
-NETWORKID=3
+NETWORKID=333345
 BOOT_NODE_KEY_NAME='test-veiovia'
 GASPRICE=1
 
