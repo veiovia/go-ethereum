@@ -29,7 +29,7 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 		Number     math.HexOrDecimal64                         `json:"number"`
 		GasUsed    math.HexOrDecimal64                         `json:"gasUsed"`
 		ParentHash common.Hash                                 `json:"parentHash"`
-		Analyzers  []string                                    `json:"analyzers"`
+		Hubs       []string                                    `json:"vhubs"`
 	}
 	var enc Genesis
 	enc.Config = g.Config
@@ -39,7 +39,7 @@ func (g Genesis) MarshalJSON() ([]byte, error) {
 	enc.GasLimit = math.HexOrDecimal64(g.GasLimit)
 	enc.Difficulty = (*math.HexOrDecimal256)(g.Difficulty)
 	enc.Mixhash = g.Mixhash
-	enc.Analyzers = g.Analyzers
+	enc.Hubs = g.Hubs
 	enc.Coinbase = g.Coinbase
 	if g.Alloc != nil {
 		enc.Alloc = make(map[common.UnprefixedAddress]GenesisAccount, len(g.Alloc))
@@ -67,7 +67,7 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 		Number     *math.HexOrDecimal64                        `json:"number"`
 		GasUsed    *math.HexOrDecimal64                        `json:"gasUsed"`
 		ParentHash *common.Hash                                `json:"parentHash"`
-		Analyzers  []string                                    `json:"analyzers"`
+		Hubs       []string                                    `json:"vhubs"`
 	}
 
 	var dec Genesis
@@ -117,6 +117,6 @@ func (g *Genesis) UnmarshalJSON(input []byte) error {
 		g.ParentHash = *dec.ParentHash
 	}
 
-	g.Analyzers = dec.Analyzers
+	g.Hubs = dec.Hubs
 	return nil
 }

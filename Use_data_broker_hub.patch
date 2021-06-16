@@ -1,0 +1,1349 @@
+Index: core/gen_genesis.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/gen_genesis.go b/core/gen_genesis.go
+--- a/core/gen_genesis.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/core/gen_genesis.go	(date 1623854164636)
+@@ -29,7 +29,7 @@
+ 		Number     math.HexOrDecimal64                         `json:"number"`
+ 		GasUsed    math.HexOrDecimal64                         `json:"gasUsed"`
+ 		ParentHash common.Hash                                 `json:"parentHash"`
+-		Analyzers  []string                                    `json:"analyzers"`
++		Hubs       []string                                    `json:"vhubs"`
+ 	}
+ 	var enc Genesis
+ 	enc.Config = g.Config
+@@ -39,7 +39,7 @@
+ 	enc.GasLimit = math.HexOrDecimal64(g.GasLimit)
+ 	enc.Difficulty = (*math.HexOrDecimal256)(g.Difficulty)
+ 	enc.Mixhash = g.Mixhash
+-	enc.Analyzers = g.Analyzers
++	enc.Hubs = g.Hubs
+ 	enc.Coinbase = g.Coinbase
+ 	if g.Alloc != nil {
+ 		enc.Alloc = make(map[common.UnprefixedAddress]GenesisAccount, len(g.Alloc))
+@@ -67,7 +67,7 @@
+ 		Number     *math.HexOrDecimal64                        `json:"number"`
+ 		GasUsed    *math.HexOrDecimal64                        `json:"gasUsed"`
+ 		ParentHash *common.Hash                                `json:"parentHash"`
+-		Analyzers  []string                                    `json:"analyzers"`
++		Hubs       []string                                    `json:"vhubs"`
+ 	}
+ 
+ 	var dec Genesis
+@@ -117,6 +117,6 @@
+ 		g.ParentHash = *dec.ParentHash
+ 	}
+ 
+-	g.Analyzers = dec.Analyzers
++	g.Hubs = dec.Hubs
+ 	return nil
+ }
+Index: consensus/veiovia/veiovia.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/consensus/veiovia/veiovia.go b/consensus/veiovia/veiovia.go
+--- a/consensus/veiovia/veiovia.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/consensus/veiovia/veiovia.go	(date 1623854083707)
+@@ -52,22 +52,24 @@
+ 	wiggleTime         = 500 * time.Millisecond // Random delay (per signer) to allow concurrent signers
+ )
+ 
+-type DecoderData struct {
++// DecodedWorkChunkBlock Stores hash and decoder name
++type DecodedWorkChunkBlock struct {
+ 	DecoderName       string
+ 	DecodedResultHash string
+ }
+ 
+-type AnalyzerData struct {
++// DataWorkPackage Stores work package id and deocded work
++type DataWorkPackage struct {
+ 	RawDataHash string
+-	Decoders    []DecoderData
++	Decoders    []DecodedWorkChunkBlock
+ }
+ 
+ // Veiovia proof-of-authority protocol constants.
+ var (
+ 	epochLength = uint64(30000) // Default number of blocks after which to checkpoint and reset the pending votes
+ 
+-	extraVanity = 32                     // Fixed number of extra-data prefix bytes reserved for signer vanity
+-	extraSeal   = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for signer seal
++	extraVanityConstraint = 32                     // Fixed number of extra-data prefix bytes reserved for signer vanity
++	extraSeal             = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for signer seal
+ 
+ 	nonceAuthVote = hexutil.MustDecode("0xffffffffffffffff") // Magic nonce number to vote on adding a new signer
+ 	nonceDropVote = hexutil.MustDecode("0x0000000000000000") // Magic nonce number to vote on removing a signer.
+@@ -279,14 +281,14 @@
+ 		return errInvalidCheckpointVote
+ 	}
+ 	// Check that the extra-data contains both the vanity and signature
+-	if len(header.Extra) < extraVanity {
++	if len(header.Extra) < extraVanityConstraint {
+ 		return errMissingVanity
+ 	}
+-	if len(header.Extra) < extraVanity+extraSeal {
++	if len(header.Extra) < extraVanityConstraint+extraSeal {
+ 		return errMissingSignature
+ 	}
+ 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
+-	signersBytes := len(header.Extra) - extraVanity - extraSeal
++	signersBytes := len(header.Extra) - extraVanityConstraint - extraSeal
+ 	if !checkpoint && signersBytes != 0 {
+ 		return errExtraSigners
+ 	}
+@@ -350,7 +352,7 @@
+ 			copy(signers[i*common.AddressLength:], signer[:])
+ 		}
+ 		extraSuffix := len(header.Extra) - extraSeal
+-		if !bytes.Equal(header.Extra[extraVanity:extraSuffix], signers) {
++		if !bytes.Equal(header.Extra[extraVanityConstraint:extraSuffix], signers) {
+ 			return errMismatchingCheckpointSigners
+ 		}
+ 	}
+@@ -388,11 +390,11 @@
+ 			if checkpoint != nil {
+ 				hash := checkpoint.Hash()
+ 
+-				signers := make([]common.Address, (len(checkpoint.Extra)-extraVanity-extraSeal)/common.AddressLength)
++				signers := make([]common.Address, (len(checkpoint.Extra)-extraVanityConstraint-extraSeal)/common.AddressLength)
+ 				for i := 0; i < len(signers); i++ {
+-					copy(signers[i][:], checkpoint.Extra[extraVanity+i*common.AddressLength:])
++					copy(signers[i][:], checkpoint.Extra[extraVanityConstraint+i*common.AddressLength:])
+ 				}
+-				snap = newSnapshot(c.config, c.signatures, number, hash, signers, checkpoint.Analyzers[:])
++				snap = newSnapshot(c.config, c.signatures, number, hash, signers, checkpoint.Hubs[:])
+ 				if err := snap.store(c.db); err != nil {
+ 					return nil, err
+ 				}
+@@ -486,7 +488,7 @@
+ 			}
+ 		}
+ 
+-		analysisErr := c.verify(header.Analyses)
++		analysisErr := c.verify(header.WorkPackage)
+ 
+ 		if analysisErr != nil {
+ 			return analysisErr
+@@ -545,10 +547,10 @@
+ 	header.Difficulty = calcDifficulty(snap, c.signer)
+ 
+ 	// Ensure the extra data has all its components
+-	if len(header.Extra) < extraVanity {
+-		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanity-len(header.Extra))...)
++	if len(header.Extra) < extraVanityConstraint {
++		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanityConstraint-len(header.Extra))...)
+ 	}
+-	header.Extra = header.Extra[:extraVanity]
++	header.Extra = header.Extra[:extraVanityConstraint]
+ 
+ 	if number%c.config.Epoch == 0 {
+ 		for _, signer := range snap.signers() {
+@@ -566,7 +568,7 @@
+ 		return consensus.ErrUnknownAncestor
+ 	}
+ 
+-	header.Analyzers = snap.Analyzers
++	header.Hubs = snap.Hubs
+ 
+ 	header.Time = parent.Time + c.config.Period
+ 	if header.Time < uint64(time.Now().Unix()) {
+@@ -791,7 +793,7 @@
+ 		header.Extra[:len(header.Extra)-crypto.SignatureLength], // Yes, this will panic if extra is too short
+ 		header.MixDigest,
+ 		header.Nonce,
+-		header.Analyzers,
++		header.Hubs,
+ 	})
+ 	if err != nil {
+ 		panic("can't encode: " + err.Error())
+@@ -814,7 +816,7 @@
+ 
+ 	defer r.Body.Close()
+ 
+-	data := new(AnalyzerData)
++	data := new(DataWorkPackage)
+ 
+ 	err = json.NewDecoder(r.Body).Decode(data)
+ 
+@@ -854,6 +856,6 @@
+ 
+ func insertAnalyses(hashes []string, header *types.Header) {
+ 	for _, h := range hashes {
+-		header.Analyses = append(header.Analyses, h)
++		header.WorkPackage = append(header.WorkPackage, h)
+ 	}
+ }
+Index: cmd/puppeth/wizard_genesis.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/cmd/puppeth/wizard_genesis.go b/cmd/puppeth/wizard_genesis.go
+--- a/cmd/puppeth/wizard_genesis.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/cmd/puppeth/wizard_genesis.go	(date 1623854164628)
+@@ -160,7 +160,7 @@
+ 			}
+ 		}
+ 
+-		genesis.Analyzers = analyzers
++		genesis.Hubs = analyzers
+ 	default:
+ 		log.Crit("Invalid consensus engine choice", "choice", choice)
+ 	}
+Index: veiovia/sample-veiovia-genesis.json
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/veiovia/sample-veiovia-genesis.json b/veiovia/sample-veiovia-genesis.json
+--- a/veiovia/sample-veiovia-genesis.json	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/veiovia/sample-veiovia-genesis.json	(date 1623855448908)
+@@ -1,6 +1,6 @@
+ {
+   "config": {
+-    "chainId": 42,
++    "chainId": 333345,
+     "homesteadBlock": 0,
+     "eip150Block": 0,
+     "eip150Hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+@@ -11,27 +11,798 @@
+     "petersburgBlock": 0,
+     "istanbulBlock": 0,
+     "veiovia": {
+-      "period": 15,
+-      "epoch": 30000
++      "period": 0,
++      "epoch": 30000,
++      "endpoints": []
+     }
+   },
+   "nonce": "0x0",
+-  "timestamp": "0x6057c187",
+-  "extraData": "0x000000000000000000000000000000000000000000000000000000000000000017dae47c7ea8710e5bc835eb5aa3eb840ff48668d8721bee0a6e8edfc5d78b3d7f0ab1b54c49485d0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+-  "gasLimit": "0x47b760",
++  "timestamp": "0x60479135",
++  "extraData": "0x0000000000000000000000000000000000000000000000000000000000000000b335672f896e1a933948800c0dfee3ecfcef550e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
++  "gasLimit": "0x99947b760",
+   "difficulty": "0x1",
+   "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+   "coinbase": "0x0000000000000000000000000000000000000000",
+   "alloc": {
+-    "17dae47c7ea8710e5bc835eb5aa3eb840ff48668": {
++    "0000000000000000000000000000000000000000": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000001": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000002": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000003": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000004": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000005": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000006": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000007": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000008": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000009": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000000a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000000b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000000c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000000d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000000e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000000f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000010": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000011": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000012": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000013": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000014": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000015": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000016": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000017": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000018": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000019": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000001a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000001b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000001c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000001d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000001e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000001f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000020": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000021": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000022": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000023": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000024": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000025": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000026": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000027": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000028": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000029": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000002a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000002b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000002c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000002d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000002e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000002f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000030": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000031": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000032": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000033": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000034": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000035": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000036": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000037": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000038": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000039": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000003a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000003b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000003c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000003d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000003e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000003f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000040": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000041": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000042": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000043": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000044": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000045": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000046": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000047": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000048": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000049": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000004a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000004b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000004c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000004d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000004e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000004f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000050": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000051": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000052": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000053": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000054": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000055": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000056": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000057": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000058": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000059": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000005a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000005b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000005c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000005d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000005e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000005f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000060": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000061": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000062": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000063": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000064": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000065": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000066": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000067": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000068": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000069": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000006a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000006b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000006c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000006d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000006e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000006f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000070": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000071": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000072": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000073": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000074": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000075": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000076": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000077": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000078": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000079": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000007a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000007b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000007c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000007d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000007e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000007f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000080": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000081": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000082": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000083": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000084": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000085": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000086": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000087": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000088": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000089": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000008a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000008b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000008c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000008d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000008e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000008f": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000090": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000091": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000092": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000093": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000094": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000095": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000096": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000097": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000098": {
++      "balance": "0x1"
++    },
++    "0000000000000000000000000000000000000099": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000009a": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000009b": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000009c": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000009d": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000009e": {
++      "balance": "0x1"
++    },
++    "000000000000000000000000000000000000009f": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a0": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a1": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a2": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a3": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a4": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a5": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a6": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a7": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a8": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000a9": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000aa": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ab": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ac": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ad": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ae": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000af": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b0": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b1": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b2": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b3": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b4": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b5": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b6": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b7": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b8": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000b9": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ba": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000bb": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000bc": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000bd": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000be": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000bf": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c0": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c1": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c2": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c3": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c4": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c5": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c6": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c7": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c8": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000c9": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ca": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000cb": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000cc": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000cd": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ce": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000cf": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d0": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d1": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d2": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d3": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d4": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d5": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d6": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d7": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d8": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000d9": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000da": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000db": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000dc": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000dd": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000de": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000df": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e0": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e1": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e2": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e3": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e4": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e5": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e6": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e7": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e8": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000e9": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ea": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000eb": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ec": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ed": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ee": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ef": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f0": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f1": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f2": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f3": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f4": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f5": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f6": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f7": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f8": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000f9": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000fa": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000fb": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000fc": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000fd": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000fe": {
++      "balance": "0x1"
++    },
++    "00000000000000000000000000000000000000ff": {
++      "balance": "0x1"
++    },
++    "b335672f896e1a933948800c0dfee3ecfcef550e": {
+       "balance": "0x200000000000000000000000000000000000000000000000000000000000000"
+     },
+-    "d8721bee0a6e8edfc5d78b3d7f0ab1b54c49485d": {
++    "adcc655c25fb90c4afb95a93e1b4ae76325bc7f0": {
+       "balance": "0x200000000000000000000000000000000000000000000000000000000000000"
+     }
+   },
+   "number": "0x0",
+   "gasUsed": "0x0",
+   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+-  "analyzers": ["https://xgkq7wnz5j.execute-api.us-east-2.amazonaws.com/fake-broker/api/transaction"]
++  "vhubs": [
++    "https://7hsy1k4hlj.execute-api.eu-west-2.amazonaws.com/broker-hub/chain/transaction"
++  ]
+ }
+\ No newline at end of file
+Index: core/chain_makers.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/chain_makers.go b/core/chain_makers.go
+--- a/core/chain_makers.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/core/chain_makers.go	(date 1623853905906)
+@@ -249,11 +249,11 @@
+ 	}
+ 
+ 	return &types.Header{
+-		Root:       state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
+-		ParentHash: parent.Hash(),
+-		Coinbase:   parent.Coinbase(),
+-		Analyzers:  parent.Header().Analyzers,
+-		Analyses:   *new([]string),
++		Root:        state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
++		ParentHash:  parent.Hash(),
++		Coinbase:    parent.Coinbase(),
++		Hubs:        parent.Header().Hubs,
++		WorkPackage: *new([]string),
+ 		Difficulty: engine.CalcDifficulty(chain, time, &types.Header{
+ 			Number:     parent.Number(),
+ 			Time:       time - 10,
+Index: core/types/gen_header_json.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/types/gen_header_json.go b/core/types/gen_header_json.go
+--- a/core/types/gen_header_json.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/core/types/gen_header_json.go	(date 1623854083687)
+@@ -52,8 +52,8 @@
+ 	enc.MixDigest = h.MixDigest
+ 	enc.Nonce = h.Nonce
+ 	enc.Hash = h.Hash()
+-	enc.Analyzers = h.Analyzers
+-	enc.Analyses = h.Analyses
++	enc.Analyzers = h.Hubs
++	enc.Analyses = h.WorkPackage
+ 	return json.Marshal(&enc)
+ }
+ 
+Index: consensus/veiovia/veiovia_test.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/consensus/veiovia/veiovia_test.go b/consensus/veiovia/veiovia_test.go
+--- a/consensus/veiovia/veiovia_test.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/consensus/veiovia/veiovia_test.go	(date 1623853391312)
+@@ -45,12 +45,12 @@
+ 		signer = new(types.HomesteadSigner)
+ 	)
+ 	genspec := &core.Genesis{
+-		ExtraData: make([]byte, extraVanity+common.AddressLength+extraSeal),
++		ExtraData: make([]byte, extraVanityConstraint+common.AddressLength+extraSeal),
+ 		Alloc: map[common.Address]core.GenesisAccount{
+ 			addr: {Balance: big.NewInt(1)},
+ 		},
+ 	}
+-	copy(genspec.ExtraData[extraVanity:], addr[:])
++	copy(genspec.ExtraData[extraVanityConstraint:], addr[:])
+ 	genesis := genspec.MustCommit(db)
+ 
+ 	// Generate a batch of blocks, each properly signed
+@@ -77,7 +77,7 @@
+ 		if i > 0 {
+ 			header.ParentHash = blocks[i-1].Hash()
+ 		}
+-		header.Extra = make([]byte, extraVanity+extraSeal)
++		header.Extra = make([]byte, extraVanityConstraint+extraSeal)
+ 		header.Difficulty = diffInTurn
+ 
+ 		sig, _ := crypto.Sign(SealHash(header).Bytes(), key)
+Index: consensus/veiovia/snapshot.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/consensus/veiovia/snapshot.go b/consensus/veiovia/snapshot.go
+--- a/consensus/veiovia/snapshot.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/consensus/veiovia/snapshot.go	(date 1623854083696)
+@@ -51,13 +51,13 @@
+ 	config   *params.VeioviaConfig // Consensus engine parameters to fine tune behavior
+ 	sigcache *lru.ARCCache         // Cache of recent block signatures to speed up ecrecover
+ 
+-	Number    uint64                      `json:"number"`    // Block number where the snapshot was created
+-	Hash      common.Hash                 `json:"hash"`      // Block hash where the snapshot was created
+-	Signers   map[common.Address]struct{} `json:"signers"`   // Set of authorized signers at this moment
+-	Recents   map[uint64]common.Address   `json:"recents"`   // Set of recent signers for spam protections
+-	Analyzers []string                    `json:"analyzers"` // List of analyzers, who can supply valid pairs to check
+-	Votes     []*Vote                     `json:"votes"`     // List of votes cast in chronological order
+-	Tally     map[common.Address]Tally    `json:"tally"`     // Current vote tally to avoid recalculating
++	Number  uint64                      `json:"number"`  // Block number where the snapshot was created
++	Hash    common.Hash                 `json:"hash"`    // Block hash where the snapshot was created
++	Signers map[common.Address]struct{} `json:"signers"` // Set of authorized signers at this moment
++	Recents map[uint64]common.Address   `json:"recents"` // Set of recent signers for spam protections
++	Hubs    []string                    `json:"vhubs"`   // List of hubs, who can supply valid data
++	Votes   []*Vote                     `json:"votes"`   // List of votes cast in chronological order
++	Tally   map[common.Address]Tally    `json:"tally"`   // Current vote tally to avoid recalculating
+ }
+ 
+ // signersAscending implements the sort interface to allow sorting a list of addresses
+@@ -72,14 +72,14 @@
+ // the genesis block.
+ func newSnapshot(config *params.VeioviaConfig, sigcache *lru.ARCCache, number uint64, hash common.Hash, signers []common.Address, analyzers []string) *Snapshot {
+ 	snap := &Snapshot{
+-		config:    config,
+-		sigcache:  sigcache,
+-		Number:    number,
+-		Hash:      hash,
+-		Signers:   make(map[common.Address]struct{}),
+-		Recents:   make(map[uint64]common.Address),
+-		Analyzers: analyzers,
+-		Tally:     make(map[common.Address]Tally),
++		config:   config,
++		sigcache: sigcache,
++		Number:   number,
++		Hash:     hash,
++		Signers:  make(map[common.Address]struct{}),
++		Recents:  make(map[uint64]common.Address),
++		Hubs:     analyzers,
++		Tally:    make(map[common.Address]Tally),
+ 	}
+ 	for _, signer := range signers {
+ 		snap.Signers[signer] = struct{}{}
+@@ -115,15 +115,15 @@
+ // copy creates a deep copy of the snapshot, though not the individual votes.
+ func (s *Snapshot) copy() *Snapshot {
+ 	cpy := &Snapshot{
+-		config:    s.config,
+-		sigcache:  s.sigcache,
+-		Number:    s.Number,
+-		Hash:      s.Hash,
+-		Signers:   make(map[common.Address]struct{}),
+-		Recents:   make(map[uint64]common.Address),
+-		Analyzers: make([]string, len(s.Analyzers)),
+-		Votes:     make([]*Vote, len(s.Votes)),
+-		Tally:     make(map[common.Address]Tally),
++		config:   s.config,
++		sigcache: s.sigcache,
++		Number:   s.Number,
++		Hash:     s.Hash,
++		Signers:  make(map[common.Address]struct{}),
++		Recents:  make(map[uint64]common.Address),
++		Hubs:     make([]string, len(s.Hubs)),
++		Votes:    make([]*Vote, len(s.Votes)),
++		Tally:    make(map[common.Address]Tally),
+ 	}
+ 	for signer := range s.Signers {
+ 		cpy.Signers[signer] = struct{}{}
+@@ -136,7 +136,7 @@
+ 	}
+ 
+ 	copy(cpy.Votes, s.Votes)
+-	copy(cpy.Analyzers, s.Analyzers)
++	copy(cpy.Hubs, s.Hubs)
+ 
+ 	return cpy
+ }
+@@ -322,7 +322,7 @@
+ }
+ 
+ func (s *Snapshot) analyzers() []string {
+-	return s.Analyzers[:]
++	return s.Hubs[:]
+ }
+ 
+ // inturn returns if a signer at a given block height is in-turn or not.
+Index: core/genesis.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/genesis.go b/core/genesis.go
+--- a/core/genesis.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/core/genesis.go	(date 1623854164633)
+@@ -56,7 +56,7 @@
+ 	Mixhash    common.Hash         `json:"mixHash"`
+ 	Coinbase   common.Address      `json:"coinbase"`
+ 	Alloc      GenesisAlloc        `json:"alloc"      gencodec:"required"`
+-	Analyzers  []string            `json:"analyzers"`
++	Hubs       []string            `json:"vhubs"`
+ 	// These fields are used for consensus tests. Please don't use them
+ 	// in actual genesis blocks.
+ 	Number     uint64      `json:"number"`
+@@ -277,7 +277,7 @@
+ 		Difficulty: g.Difficulty,
+ 		MixDigest:  g.Mixhash,
+ 		Coinbase:   g.Coinbase,
+-		Analyzers:  g.Analyzers,
++		Hubs:       g.Hubs,
+ 		Root:       root,
+ 	}
+ 	if g.GasLimit == 0 {
+Index: consensus/veiovia/snapshot_test.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/consensus/veiovia/snapshot_test.go b/consensus/veiovia/snapshot_test.go
+--- a/consensus/veiovia/snapshot_test.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/consensus/veiovia/snapshot_test.go	(date 1623853391329)
+@@ -53,7 +53,7 @@
+ 	}
+ 	sort.Sort(signersAscending(auths))
+ 	for i, auth := range auths {
+-		copy(header.Extra[extraVanity+i*common.AddressLength:], auth.Bytes())
++		copy(header.Extra[extraVanityConstraint+i*common.AddressLength:], auth.Bytes())
+ 	}
+ }
+ 
+@@ -394,10 +394,10 @@
+ 		}
+ 		// Create the genesis block with the initial set of signers
+ 		genesis := &core.Genesis{
+-			ExtraData: make([]byte, extraVanity+common.AddressLength*len(signers)+extraSeal),
++			ExtraData: make([]byte, extraVanityConstraint+common.AddressLength*len(signers)+extraSeal),
+ 		}
+ 		for j, signer := range signers {
+-			copy(genesis.ExtraData[extraVanity+j*common.AddressLength:], signer[:])
++			copy(genesis.ExtraData[extraVanityConstraint+j*common.AddressLength:], signer[:])
+ 		}
+ 		// Create a pristine blockchain with the genesis injected
+ 		db := rawdb.NewMemoryDatabase()
+@@ -428,9 +428,9 @@
+ 			if j > 0 {
+ 				header.ParentHash = blocks[j-1].Hash()
+ 			}
+-			header.Extra = make([]byte, extraVanity+extraSeal)
++			header.Extra = make([]byte, extraVanityConstraint+extraSeal)
+ 			if auths := tt.votes[j].checkpoint; auths != nil {
+-				header.Extra = make([]byte, extraVanity+len(auths)*common.AddressLength+extraSeal)
++				header.Extra = make([]byte, extraVanityConstraint+len(auths)*common.AddressLength+extraSeal)
+ 				accounts.checkpoint(header, auths)
+ 			}
+ 			header.Difficulty = diffInTurn // Ignored, we just need a valid number
+Index: veiovia/test_net/main_node/datadir/genesis.json
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/veiovia/test_net/main_node/datadir/genesis.json b/veiovia/test_net/main_node/datadir/genesis.json
+--- a/veiovia/test_net/main_node/datadir/genesis.json	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/veiovia/test_net/main_node/datadir/genesis.json	(date 1623855423185)
+@@ -802,5 +802,5 @@
+   "number": "0x0",
+   "gasUsed": "0x0",
+   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+-  "analyzers": ["https://xgkq7wnz5j.execute-api.us-east-2.amazonaws.com/fake-broker/api/transaction"]
++  "vhubs": ["https://7hsy1k4hlj.execute-api.eu-west-2.amazonaws.com/broker-hub/chain/transaction"]
+ }
+\ No newline at end of file
+Index: core/types/block.go
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/core/types/block.go b/core/types/block.go
+--- a/core/types/block.go	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/core/types/block.go	(date 1623853912962)
+@@ -86,8 +86,8 @@
+ 	MixDigest   common.Hash    `json:"mixHash"`
+ 	Nonce       BlockNonce     `json:"nonce"`
+ 	// veiovia specific fields
+-	Analyzers []string `json:"analyzers"`
+-	Analyses  []string `json:"analyses"`
++	Hubs        []string `json:"vhubs"`
++	WorkPackage []string `json:"vpacks"`
+ }
+ 
+ // field type overrides for gencodec
+@@ -278,14 +278,14 @@
+ 		copy(cpy.Extra, h.Extra)
+ 	}
+ 
+-	if len(h.Analyzers) > 0 {
+-		cpy.Analyzers = make([]string, len(h.Analyzers))
+-		copy(cpy.Analyzers, h.Analyzers)
++	if len(h.Hubs) > 0 {
++		cpy.Hubs = make([]string, len(h.Hubs))
++		copy(cpy.Hubs, h.Hubs)
+ 	}
+ 
+-	if len(h.Analyses) > 0 {
+-		cpy.Analyses = make([]string, len(h.Analyses))
+-		copy(cpy.Analyses, h.Analyses)
++	if len(h.WorkPackage) > 0 {
++		cpy.WorkPackage = make([]string, len(h.WorkPackage))
++		copy(cpy.WorkPackage, h.WorkPackage)
+ 	}
+ 
+ 	return &cpy
+Index: veiovia/test_net/slave_node_local/datadir/genesis.json
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/veiovia/test_net/slave_node_local/datadir/genesis.json b/veiovia/test_net/slave_node_local/datadir/genesis.json
+--- a/veiovia/test_net/slave_node_local/datadir/genesis.json	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/veiovia/test_net/slave_node_local/datadir/genesis.json	(date 1623855423185)
+@@ -802,5 +802,5 @@
+   "number": "0x0",
+   "gasUsed": "0x0",
+   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+-  "analyzers": ["https://xgkq7wnz5j.execute-api.us-east-2.amazonaws.com/fake-broker/api/transaction"]
++  "vhubs": ["https://7hsy1k4hlj.execute-api.eu-west-2.amazonaws.com/broker-hub/chain/transaction"]
+ }
+\ No newline at end of file
+Index: veiovia/test_net/slave_node/datadir/genesis.json
+IDEA additional info:
+Subsystem: com.intellij.openapi.diff.impl.patch.CharsetEP
+<+>UTF-8
+===================================================================
+diff --git a/veiovia/test_net/slave_node/datadir/genesis.json b/veiovia/test_net/slave_node/datadir/genesis.json
+--- a/veiovia/test_net/slave_node/datadir/genesis.json	(revision c30ce9f3da91a5582012aff539e002212a2e9316)
++++ b/veiovia/test_net/slave_node/datadir/genesis.json	(date 1623855423185)
+@@ -802,5 +802,5 @@
+   "number": "0x0",
+   "gasUsed": "0x0",
+   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+-  "analyzers": ["https://xgkq7wnz5j.execute-api.us-east-2.amazonaws.com/fake-broker/api/transaction"]
++  "vhubs": ["https://7hsy1k4hlj.execute-api.eu-west-2.amazonaws.com/broker-hub/chain/transaction"]
+ }
+\ No newline at end of file

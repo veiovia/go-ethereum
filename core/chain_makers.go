@@ -249,11 +249,11 @@ func makeHeader(chain consensus.ChainReader, parent *types.Block, state *state.S
 	}
 
 	return &types.Header{
-		Root:       state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
-		ParentHash: parent.Hash(),
-		Coinbase:   parent.Coinbase(),
-		Analyzers:  parent.Header().Analyzers,
-		Analyses:   *new([]string),
+		Root:        state.IntermediateRoot(chain.Config().IsEIP158(parent.Number())),
+		ParentHash:  parent.Hash(),
+		Coinbase:    parent.Coinbase(),
+		Hubs:        parent.Header().Hubs,
+		WorkPackage: *new([]string),
 		Difficulty: engine.CalcDifficulty(chain, time, &types.Header{
 			Number:     parent.Number(),
 			Time:       time - 10,

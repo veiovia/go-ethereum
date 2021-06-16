@@ -52,8 +52,8 @@ func (h Header) MarshalJSON() ([]byte, error) {
 	enc.MixDigest = h.MixDigest
 	enc.Nonce = h.Nonce
 	enc.Hash = h.Hash()
-	enc.Analyzers = h.Analyzers
-	enc.Analyses = h.Analyses
+	enc.Analyzers = h.Hubs
+	enc.Analyses = h.WorkPackage
 	return json.Marshal(&enc)
 }
 

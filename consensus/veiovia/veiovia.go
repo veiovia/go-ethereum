@@ -52,22 +52,24 @@ const (
 	wiggleTime         = 500 * time.Millisecond // Random delay (per signer) to allow concurrent signers
 )
 
-type DecoderData struct {
+// DecodedWorkChunkBlock Stores hash and decoder name
+type DecodedWorkChunkBlock struct {
 	DecoderName       string
 	DecodedResultHash string
 }
 
-type AnalyzerData struct {
+// DataWorkPackage Stores work package id and deocded work
+type DataWorkPackage struct {
 	RawDataHash string
-	Decoders    []DecoderData
+	Decoders    []DecodedWorkChunkBlock
 }
 
 // Veiovia proof-of-authority protocol constants.
 var (
 	epochLength = uint64(30000) // Default number of blocks after which to checkpoint and reset the pending votes
 
-	extraVanity = 32                     // Fixed number of extra-data prefix bytes reserved for signer vanity
-	extraSeal   = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for signer seal
+	extraVanityConstraint = 32                     // Fixed number of extra-data prefix bytes reserved for signer vanity
+	extraSeal             = crypto.SignatureLength // Fixed number of extra-data suffix bytes reserved for signer seal
 
 	nonceAuthVote = hexutil.MustDecode("0xffffffffffffffff") // Magic nonce number to vote on adding a new signer
 	nonceDropVote = hexutil.MustDecode("0x0000000000000000") // Magic nonce number to vote on removing a signer.
@@ -279,14 +281,14 @@ func (c *Veiovia) verifyHeader(chain consensus.ChainHeaderReader, header *types.
 		return errInvalidCheckpointVote
 	}
 	// Check that the extra-data contains both the vanity and signature
-	if len(header.Extra) < extraVanity {
+	if len(header.Extra) < extraVanityConstraint {
 		return errMissingVanity
 	}
-	if len(header.Extra) < extraVanity+extraSeal {
+	if len(header.Extra) < extraVanityConstraint+extraSeal {
 		return errMissingSignature
 	}
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
-	signersBytes := len(header.Extra) - extraVanity - extraSeal
+	signersBytes := len(header.Extra) - extraVanityConstraint - extraSeal
 	if !checkpoint && signersBytes != 0 {
 		return errExtraSigners
 	}
@@ -350,7 +352,7 @@ func (c *Veiovia) verifyCascadingFields(chain consensus.ChainHeaderReader, heade
 			copy(signers[i*common.AddressLength:], signer[:])
 		}
 		extraSuffix := len(header.Extra) - extraSeal
-		if !bytes.Equal(header.Extra[extraVanity:extraSuffix], signers) {
+		if !bytes.Equal(header.Extra[extraVanityConstraint:extraSuffix], signers) {
 			return errMismatchingCheckpointSigners
 		}
 	}
@@ -388,11 +390,11 @@ func (c *Veiovia) snapshot(chain consensus.ChainHeaderReader, number uint64, has
 			if checkpoint != nil {
 				hash := checkpoint.Hash()
 
-				signers := make([]common.Address, (len(checkpoint.Extra)-extraVanity-extraSeal)/common.AddressLength)
+				signers := make([]common.Address, (len(checkpoint.Extra)-extraVanityConstraint-extraSeal)/common.AddressLength)
 				for i := 0; i < len(signers); i++ {
-					copy(signers[i][:], checkpoint.Extra[extraVanity+i*common.AddressLength:])
+					copy(signers[i][:], checkpoint.Extra[extraVanityConstraint+i*common.AddressLength:])
 				}
-				snap = newSnapshot(c.config, c.signatures, number, hash, signers, checkpoint.Analyzers[:])
+				snap = newSnapshot(c.config, c.signatures, number, hash, signers, checkpoint.Hubs[:])
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
@@ -486,7 +488,7 @@ func (c *Veiovia) verifySeal(chain consensus.ChainHeaderReader, header *types.He
 			}
 		}
 
-		analysisErr := c.verify(header.Analyses)
+		analysisErr := c.verify(header.WorkPackage)
 
 		if analysisErr != nil {
 			return analysisErr
@@ -545,10 +547,10 @@ func (c *Veiovia) Prepare(chain consensus.ChainHeaderReader, header *types.Heade
 	header.Difficulty = calcDifficulty(snap, c.signer)
 
 	// Ensure the extra data has all its components
-	if len(header.Extra) < extraVanity {
-		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanity-len(header.Extra))...)
+	if len(header.Extra) < extraVanityConstraint {
+		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanityConstraint-len(header.Extra))...)
 	}
-	header.Extra = header.Extra[:extraVanity]
+	header.Extra = header.Extra[:extraVanityConstraint]
 
 	if number%c.config.Epoch == 0 {
 		for _, signer := range snap.signers() {
@@ -566,7 +568,7 @@ func (c *Veiovia) Prepare(chain consensus.ChainHeaderReader, header *types.Heade
 		return consensus.ErrUnknownAncestor
 	}
 
-	header.Analyzers = snap.Analyzers
+	header.Hubs = snap.Hubs
 
 	header.Time = parent.Time + c.config.Period
 	if header.Time < uint64(time.Now().Unix()) {
@@ -791,7 +793,7 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 		header.Extra[:len(header.Extra)-crypto.SignatureLength], // Yes, this will panic if extra is too short
 		header.MixDigest,
 		header.Nonce,
-		header.Analyzers,
+		header.Hubs,
 	})
 	if err != nil {
 		panic("can't encode: " + err.Error())
@@ -814,7 +816,7 @@ func (c *Veiovia) nextDnaHash(s *Snapshot) (error, []string) {
 
 	defer r.Body.Close()
 
-	data := new(AnalyzerData)
+	data := new(DataWorkPackage)
 
 	err = json.NewDecoder(r.Body).Decode(data)
 
@@ -854,6 +856,6 @@ func (c *Veiovia) verify(hashes []string) error {
 
 func insertAnalyses(hashes []string, header *types.Header) {
 	for _, h := range hashes {
-		header.Analyses = append(header.Analyses, h)
+		header.WorkPackage = append(header.WorkPackage, h)
 	}
 }

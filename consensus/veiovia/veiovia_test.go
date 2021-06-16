@@ -45,12 +45,12 @@ func TestReimportMirroredState(t *testing.T) {
 		signer = new(types.HomesteadSigner)
 	)
 	genspec := &core.Genesis{
-		ExtraData: make([]byte, extraVanity+common.AddressLength+extraSeal),
+		ExtraData: make([]byte, extraVanityConstraint+common.AddressLength+extraSeal),
 		Alloc: map[common.Address]core.GenesisAccount{
 			addr: {Balance: big.NewInt(1)},
 		},
 	}
-	copy(genspec.ExtraData[extraVanity:], addr[:])
+	copy(genspec.ExtraData[extraVanityConstraint:], addr[:])
 	genesis := genspec.MustCommit(db)
 
 	// Generate a batch of blocks, each properly signed
@@ -77,7 +77,7 @@ func TestReimportMirroredState(t *testing.T) {
 		if i > 0 {
 			header.ParentHash = blocks[i-1].Hash()
 		}
-		header.Extra = make([]byte, extraVanity+extraSeal)
+		header.Extra = make([]byte, extraVanityConstraint+extraSeal)
 		header.Difficulty = diffInTurn
 
 		sig, _ := crypto.Sign(SealHash(header).Bytes(), key)

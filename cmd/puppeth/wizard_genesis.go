@@ -160,7 +160,7 @@ func (w *wizard) makeGenesis() {
 			}
 		}
 
-		genesis.Analyzers = analyzers
+		genesis.Hubs = analyzers
 	default:
 		log.Crit("Invalid consensus engine choice", "choice", choice)
 	}

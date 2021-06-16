@@ -802,5 +802,5 @@
   "number": "0x0",
   "gasUsed": "0x0",
   "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "analyzers": ["https://xgkq7wnz5j.execute-api.us-east-2.amazonaws.com/fake-broker/api/transaction"]
+  "vhubs": ["https://7hsy1k4hlj.execute-api.eu-west-2.amazonaws.com/broker-hub/chain/transaction"]
 }

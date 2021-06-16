@@ -51,13 +51,13 @@ type Snapshot struct {
 	config   *params.VeioviaConfig // Consensus engine parameters to fine tune behavior
 	sigcache *lru.ARCCache         // Cache of recent block signatures to speed up ecrecover
 
-	Number    uint64                      `json:"number"`    // Block number where the snapshot was created
-	Hash      common.Hash                 `json:"hash"`      // Block hash where the snapshot was created
-	Signers   map[common.Address]struct{} `json:"signers"`   // Set of authorized signers at this moment
-	Recents   map[uint64]common.Address   `json:"recents"`   // Set of recent signers for spam protections
-	Analyzers []string                    `json:"analyzers"` // List of analyzers, who can supply valid pairs to check
-	Votes     []*Vote                     `json:"votes"`     // List of votes cast in chronological order
-	Tally     map[common.Address]Tally    `json:"tally"`     // Current vote tally to avoid recalculating
+	Number  uint64                      `json:"number"`  // Block number where the snapshot was created
+	Hash    common.Hash                 `json:"hash"`    // Block hash where the snapshot was created
+	Signers map[common.Address]struct{} `json:"signers"` // Set of authorized signers at this moment
+	Recents map[uint64]common.Address   `json:"recents"` // Set of recent signers for spam protections
+	Hubs    []string                    `json:"vhubs"`   // List of hubs, who can supply valid data
+	Votes   []*Vote                     `json:"votes"`   // List of votes cast in chronological order
+	Tally   map[common.Address]Tally    `json:"tally"`   // Current vote tally to avoid recalculating
 }
 
 // signersAscending implements the sort interface to allow sorting a list of addresses
@@ -72,14 +72,14 @@ func (s signersAscending) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 // the genesis block.
 func newSnapshot(config *params.VeioviaConfig, sigcache *lru.ARCCache, number uint64, hash common.Hash, signers []common.Address, analyzers []string) *Snapshot {
 	snap := &Snapshot{
-		config:    config,
-		sigcache:  sigcache,
-		Number:    number,
-		Hash:      hash,
-		Signers:   make(map[common.Address]struct{}),
-		Recents:   make(map[uint64]common.Address),
-		Analyzers: analyzers,
-		Tally:     make(map[common.Address]Tally),
+		config:   config,
+		sigcache: sigcache,
+		Number:   number,
+		Hash:     hash,
+		Signers:  make(map[common.Address]struct{}),
+		Recents:  make(map[uint64]common.Address),
+		Hubs:     analyzers,
+		Tally:    make(map[common.Address]Tally),
 	}
 	for _, signer := range signers {
 		snap.Signers[signer] = struct{}{}
@@ -115,15 +115,15 @@ func (s *Snapshot) store(db ethdb.Database) error {
 // copy creates a deep copy of the snapshot, though not the individual votes.
 func (s *Snapshot) copy() *Snapshot {
 	cpy := &Snapshot{
-		config:    s.config,
-		sigcache:  s.sigcache,
-		Number:    s.Number,
-		Hash:      s.Hash,
-		Signers:   make(map[common.Address]struct{}),
-		Recents:   make(map[uint64]common.Address),
-		Analyzers: make([]string, len(s.Analyzers)),
-		Votes:     make([]*Vote, len(s.Votes)),
-		Tally:     make(map[common.Address]Tally),
+		config:   s.config,
+		sigcache: s.sigcache,
+		Number:   s.Number,
+		Hash:     s.Hash,
+		Signers:  make(map[common.Address]struct{}),
+		Recents:  make(map[uint64]common.Address),
+		Hubs:     make([]string, len(s.Hubs)),
+		Votes:    make([]*Vote, len(s.Votes)),
+		Tally:    make(map[common.Address]Tally),
 	}
 	for signer := range s.Signers {
 		cpy.Signers[signer] = struct{}{}
@@ -136,7 +136,7 @@ func (s *Snapshot) copy() *Snapshot {
 	}
 
 	copy(cpy.Votes, s.Votes)
-	copy(cpy.Analyzers, s.Analyzers)
+	copy(cpy.Hubs, s.Hubs)
 
 	return cpy
 }
@@ -322,7 +322,7 @@ func (s *Snapshot) signers() []common.Address {
 }
 
 func (s *Snapshot) analyzers() []string {
-	return s.Analyzers[:]
+	return s.Hubs[:]
 }
 
 // inturn returns if a signer at a given block height is in-turn or not.
